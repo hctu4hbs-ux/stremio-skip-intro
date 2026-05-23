@@ -1,30 +1,40 @@
 /**
  * addon.js
  *
- * Stremio add-on integration using stremio-addon-sdk.
+ * Stremio add-on — serves skip-intro/outro markers as subtitle tracks.
  *
- * Install in Stremio by visiting:
- *   http://localhost:7000/manifest.json
- * and clicking "Install".
+ * How it works:
+ *   1. Stremio reads /manifest.json when the add-on is installed
+ *   2. During playback, Stremio calls /subtitles/:type/:id.json
+ *   3. We return a real hosted URL pointing to a WebVTT file
+ *   4. Stremio loads the VTT file; the player shows a "Skip" button
+ *      at the exact timestamps defined in the cues
  *
- * This add-on provides skip-intro/outro data as subtitle cues (VTT format)
- * that Stremio's player can display and act on.
+ * Install URL (paste into Stremio → Add-ons search bar):
+ *   http://<your-host>/manifest.json
  */
 
-const { addonBuilder, serveHTTP } = require('stremio-addon-sdk');
-const { getShow, getCatalog } = require('./services/catalog');
+const { addonBuilder } = require('stremio-addon-sdk');
+const { getShow } = require('./services/catalog');
+
+// The public base URL of this server.
+// Set BASE_URL in .env for production (e.g. https://your-server.com).
+// Falls back to localhost for local development.
+function baseUrl() {
+    return (process.env.BASE_URL || `http://localhost:${process.env.PORT || 7000}`).replace(/\/$/, '');
+}
 
 const MANIFEST = {
     id: 'community.stremio-skip-intro',
     version: require('../package.json').version,
-    name: 'Skip Intro',
-    description: 'Community-powered intro/outro skip markers for TV shows and movies. Shows skip prompts at the right timestamp so you never sit through an intro again.',
+    name: '⏩ Skip Intro',
+    description: 'Automatically shows a Skip button at intro and outro timestamps for TV shows and movies.',
     logo: 'https://i.imgur.com/MZnGMzp.png',
     background: 'https://i.imgur.com/pjSSGAU.jpg',
     catalogs: [],
     resources: ['subtitles'],
     types: ['series', 'movie'],
-    idPrefixes: ['tt', 'kitsu:'],
+    idPrefixes: ['tt', 'kitsu'],
     behaviorHints: {
         configurable: false,
         configurationRequired: false,
@@ -34,64 +44,83 @@ const MANIFEST = {
 const builder = new addonBuilder(MANIFEST);
 
 /**
- * Subtitles handler.
+ * Subtitles handler — called by Stremio during playback.
  *
- * Stremio calls this with { type, id } where id is:
- *   - "tt1234567:1:2" for series (IMDB:season:episode)
- *   - "tt1234567"     for movies
- *
- * We return a WebVTT subtitle track with skip markers embedded as cues.
- * Each cue fires at the start of an intro/outro so Stremio shows a "Skip" button.
+ * id examples:
+ *   "tt0944947:1:1"  → Game of Thrones S01E01
+ *   "tt0903747"      → Breaking Bad (movie-style / no episode)
  */
-builder.defineSubtitlesHandler(async ({ type, id, extra }) => {
-    // Parse the video ID
+builder.defineSubtitlesHandler(async ({ type, id }) => {
     const parts = id.split(':');
     const imdbId = parts[0].startsWith('kitsu') ? `${parts[0]}:${parts[1]}` : parts[0];
 
     const show = getShow(imdbId);
     if (!show) return { subtitles: [] };
 
-    const segments = (show.segments || []).filter(seg => {
-        // Match exact episode OR applyToSeries segments
-        return seg.videoId === id || seg.applyToSeries;
-    });
-
+    const segments = (show.segments || []).filter(
+        seg => seg.videoId === id || seg.applyToSeries
+    );
     if (segments.length === 0) return { subtitles: [] };
 
-    // Build WebVTT content with one cue per segment
-    const vttLines = ['WEBVTT', ''];
-    for (const seg of segments) {
-        vttLines.push(
-            `${seg.id}`,
-            `${toVTTTime(seg.start)} --> ${toVTTTime(seg.end)}`,
-            `{ad}skip:${seg.label.toLowerCase()}`,
-            '',
-        );
-    }
-
-    const vttContent = vttLines.join('\n');
-    const dataUri = `data:text/vtt;charset=utf-8,${encodeURIComponent(vttContent)}`;
+    // Return a real hosted URL — Stremio requires HTTP/HTTPS, not data URIs
+    const encodedId = encodeURIComponent(id);
+    const url = `${baseUrl()}/vtt/${encodedId}.vtt`;
 
     return {
         subtitles: [
             {
                 id: `skip-intro-${id}`,
-                url: dataUri,
+                url,
                 lang: 'skip',
             },
         ],
     };
 });
 
+// ─── VTT file builder ─────────────────────────────────────────────────────────
+
 /**
- * Convert seconds → WebVTT timestamp (HH:MM:SS.mmm)
+ * Build a WebVTT string for a given video ID.
+ * Cue text uses the {skip} metadata format that Stremio's player recognises
+ * to render a "Skip Intro" / "Skip Outro" button overlay.
+ *
+ * @param {string} id  e.g. "tt0944947:1:1"
+ * @returns {string|null}  VTT content, or null if no segments found
  */
-function toVTTTime(seconds) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    const ms = Math.round((seconds % 1) * 1000);
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}.${String(ms).padStart(3, '0')}`;
+function buildVtt(id) {
+    const parts = id.split(':');
+    const imdbId = parts[0].startsWith('kitsu') ? `${parts[0]}:${parts[1]}` : parts[0];
+
+    const show = getShow(imdbId);
+    if (!show) return null;
+
+    const segments = (show.segments || []).filter(
+        seg => seg.videoId === id || seg.applyToSeries
+    );
+    if (segments.length === 0) return null;
+
+    const lines = ['WEBVTT', ''];
+    for (const seg of segments) {
+        lines.push(
+            seg.id,
+            `${toVTTTime(seg.start)} --> ${toVTTTime(seg.end)}`,
+            // {skip} tells Stremio's player to show the skip button overlay
+            `{skip}${seg.label}`,
+            '',
+        );
+    }
+    return lines.join('\n');
 }
 
-module.exports = { builder, MANIFEST };
+/**
+ * Convert seconds (float) → WebVTT timestamp HH:MM:SS.mmm
+ */
+function toVTTTime(s) {
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = Math.floor(s % 60);
+    const ms = Math.round((s % 1) * 1000);
+    return [h, m, sec].map(n => String(n).padStart(2, '0')).join(':') + '.' + String(ms).padStart(3, '0');
+}
+
+module.exports = { builder, MANIFEST, buildVtt };

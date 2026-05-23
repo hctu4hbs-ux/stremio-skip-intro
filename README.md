@@ -1,25 +1,71 @@
-# stremio-skip-intro
+# ⏩ stremio-skip-intro
 
-A developer tool for managing, validating, and publishing skip-intro/outro timestamp data to GitHub — fully compatible with the [IntroHater](https://github.com/introhaterapp/IntroHater) catalog format.
+> A self-hosted tool for building and publishing community skip-intro/outro timestamp databases — designed for Stremio add-on developers.
 
-Developers use this tool to build and maintain a community-powered database of intro/outro timestamps that any Stremio add-on can consume.
-
----
-
-## What it does
-
-- **Manage segments** — Add, edit, and delete intro/outro timestamps for any show or movie by IMDB ID
-- **AniSkip integration** — Automatically fetch anime timestamps from [AniSkip](https://aniskip.com) (150,000+ episodes)
-- **GitHub sync** — Push your `catalog.json` to any GitHub repository with one API call or script
-- **Import** — Pull in an existing IntroHater `catalog.json` and merge it into your local database
-- **Validate** — Run a validator to catch bad timestamps, missing fields, and duplicates before publishing
-- **REST API** — Integrate into any add-on or automation pipeline
+Never sit through another intro again. This tool lets you manage a database of precise timestamps, then serve them directly to Stremio as a working add-on that shows a **Skip** button right when playback reaches the intro or outro.
 
 ---
 
-## Catalog format
+## ✨ What it does
 
-The `data/catalog.json` produced by this tool is **100% compatible** with the IntroHater catalog schema:
+| Feature | Description |
+|---|---|
+| 🗂️ **Manage timestamps** | Add, edit, and delete intro/outro markers for any show or movie by IMDB ID |
+| ⏩ **Stremio add-on** | Installs directly into Stremio — shows a skip button at the exact moment |
+| 🔄 **GitHub sync** | Push your `catalog.json` to any GitHub repo with one command |
+| 📥 **Import / Export** | Import existing timestamp databases or export yours for sharing |
+| ✅ **Validation** | Catch bad timestamps, duplicates, and missing fields before publishing |
+| 🌐 **REST API** | Integrate into any automation pipeline or add-on project |
+| 🎌 **Anime support** | Optional lookup from community anime timestamp databases |
+
+---
+
+## 🚀 Quick start
+
+```bash
+git clone https://github.com/your-username/stremio-skip-intro
+cd stremio-skip-intro
+npm install
+cp .env.example .env
+# Fill in your GitHub token and repo details in .env
+npm run seed   # Load example data (Game of Thrones, Breaking Bad, Naruto)
+npm start      # Start on http://localhost:7000
+```
+
+Then open Stremio → **Add-ons** → paste in the search bar:
+
+```
+http://localhost:7000/manifest.json
+```
+
+Click **Install** — done. 🎉 Stremio will now show a **Skip Intro / Skip Outro** button automatically.
+
+---
+
+## 📦 How Stremio integration works
+
+```
+Stremio player
+     │
+     ├─ reads  GET /manifest.json          ← add-on registration
+     │
+     └─ calls  GET /subtitles/:type/:id.json  ← during every playback
+                    │
+                    └─ returns URL → GET /vtt/tt1234567:1:1.vtt
+                                         │
+                                         └─ WebVTT cues with {skip} markers
+                                            → player shows "Skip Intro" button
+```
+
+The `/vtt/:videoId.vtt` endpoint serves a standard [WebVTT](https://www.w3.org/TR/webvtt1/) file. Cues use the `{skip}` metadata format that Stremio's built-in player recognises to render the skip overlay.
+
+> 💡 **For remote/public use:** set `BASE_URL=https://your-server.com` in `.env` so the VTT URLs resolve correctly when Stremio is on a different machine.
+
+---
+
+## 🗂️ Data format
+
+The `data/catalog.json` file follows a standard schema that any Stremio add-on can read:
 
 ```json
 {
@@ -29,11 +75,6 @@ The `data/catalog.json` produced by this tool is **100% compatible** with the In
       "title": "Breaking Bad",
       "year": "2008–2013",
       "type": "series",
-      "poster": null,
-      "sources": { "local": true, "aniskip": false, "animeSkip": false },
-      "episodes": {
-        "1:1": { "season": 1, "episode": 1, "count": 1 }
-      },
       "segments": [
         {
           "id": "uuid",
@@ -43,72 +84,64 @@ The `data/catalog.json` produced by this tool is **100% compatible** with the In
           "start": 0,
           "end": 42,
           "label": "Intro",
-          "applyToSeries": false,
-          "createdAt": "2025-01-01T00:00:00.000Z"
+          "applyToSeries": false
         }
-      ],
-      "addedAt": "2025-01-01T00:00:00.000Z",
-      "lastUpdated": "2025-01-01T00:00:00.000Z",
-      "totalSegments": 1
+      ]
     }
   }
 }
 ```
 
-**Video ID format:**
-- TV episodes: `tt1234567:season:episode` (e.g. `tt0944947:1:3`)
-- Movies / series-wide: `tt1234567`
-- Anime (Kitsu): `kitsu:12345:1:1`
+**Video ID format**
 
-**Segment labels:** `Intro` | `Outro` | `Recap` | `Credits`
+| Content | Format | Example |
+|---|---|---|
+| TV episode | `tt{id}:{season}:{episode}` | `tt0944947:1:3` |
+| Movie | `tt{id}` | `tt0111161` |
+| Anime (Kitsu) | `kitsu:{id}:{season}:{episode}` | `kitsu:12345:1:1` |
+
+**Labels:** `Intro` · `Outro` · `Recap` · `Credits`
 
 ---
 
-## Quick start
+## ⚙️ Environment variables
 
-```bash
-git clone https://github.com/your-username/stremio-skip-intro
-cd stremio-skip-intro
-npm install
-cp .env.example .env
-# Edit .env with your GitHub token and repo details
-npm run seed       # Add example data
-npm start          # Start API server on http://localhost:7000
+```env
+# Server
+PORT=7000
+BASE_URL=http://localhost:7000   # set to public URL for remote installs
+
+# GitHub sync
+GITHUB_TOKEN=ghp_...
+GITHUB_REPO_OWNER=your-username
+GITHUB_REPO_NAME=your-repo
+GITHUB_BRANCH=main
+GITHUB_FILE_PATH=data/catalog.json
+
+# Optional
+ANISKIP_ENABLED=true             # anime timestamp lookups
+DATA_DIR=./data                  # where catalog.json is stored
 ```
 
 ---
 
-## Environment variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `GITHUB_TOKEN` | Yes (for sync) | GitHub PAT with `repo` scope |
-| `GITHUB_REPO_OWNER` | Yes (for sync) | GitHub username or org |
-| `GITHUB_REPO_NAME` | Yes (for sync) | Repository name |
-| `GITHUB_BRANCH` | No | Target branch (default: `main`) |
-| `GITHUB_FILE_PATH` | No | Path inside repo (default: `data/catalog.json`) |
-| `PORT` | No | Server port (default: `7000`) |
-| `ANISKIP_ENABLED` | No | Enable AniSkip fetching (default: `true`) |
-| `DATA_DIR` | No | Local data directory (default: `./data`) |
-
----
-
-## API reference
+## 🔌 API reference
 
 ### Segments
 
-| Method | Path | Description |
+| Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/segments` | List all segments. Filter: `?imdbId=tt...&label=Intro` |
-| `GET` | `/api/segments/stats` | Total shows, segments, label breakdown |
-| `POST` | `/api/segments` | Add a segment |
-| `PATCH` | `/api/segments/:id` | Update a segment |
-| `PUT` | `/api/segments/:videoId` | Replace all segments for a videoId |
+| `GET` | `/api/segments` | List all — filter by `?imdbId=` or `?label=` |
+| `GET` | `/api/segments/stats` | Total shows, segment counts, label breakdown |
+| `POST` | `/api/segments` | Add a new segment |
+| `PATCH` | `/api/segments/:id` | Update start/end/label |
+| `PUT` | `/api/segments/:videoId` | Replace all segments for an episode |
 | `DELETE` | `/api/segments/:id` | Delete a segment |
-| `GET` | `/api/segments/aniskip/:malId/:episode` | Fetch from AniSkip |
+| `GET` | `/api/segments/aniskip/:malId/:episode` | Look up anime timestamps |
 
-**POST /api/segments body:**
+**Add a segment:**
 ```json
+POST /api/segments
 {
   "imdbId": "tt0944947",
   "showTitle": "Game of Thrones",
@@ -116,92 +149,77 @@ npm start          # Start API server on http://localhost:7000
   "episode": 1,
   "start": 0,
   "end": 97,
-  "label": "Intro",
-  "applyToSeries": false
+  "label": "Intro"
 }
 ```
 
 ### Catalog
 
-| Method | Path | Description |
+| Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/api/catalog` | Full `catalog.json` |
-| `GET` | `/api/catalog/:imdbId` | One show with all segments |
-| `POST` | `/api/catalog/shows` | Add a show (no segments) |
-| `DELETE` | `/api/catalog/shows/:imdbId` | Delete show + all segments |
-| `POST` | `/api/catalog/import` | Import existing `catalog.json` |
+| `GET` | `/api/catalog/:imdbId` | One show with all its segments |
+| `POST` | `/api/catalog/shows` | Add a show entry |
+| `DELETE` | `/api/catalog/shows/:imdbId` | Delete show and all segments |
+| `POST` | `/api/catalog/import` | Import an existing catalog |
 
-**POST /api/catalog/import body:**
+**Import:**
 ```json
+POST /api/catalog/import
 {
   "catalog": { "lastUpdated": "...", "media": { ... } },
   "mode": "merge"
 }
 ```
-`mode`: `merge` (default — keeps existing, adds new) or `overwrite`
+`mode`: `merge` (default — keeps existing data) or `overwrite`
 
 ### GitHub sync
 
-| Method | Path | Description |
+| Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/github/config` | Get current config |
-| `POST` | `/api/github/config` | Save config |
-| `GET` | `/api/github/preview` | Preview JSON before push |
+| `GET` | `/api/github/config` | Current config |
+| `POST` | `/api/github/config` | Save repo settings |
+| `GET` | `/api/github/preview` | Preview before pushing |
 | `POST` | `/api/github/sync` | Push `catalog.json` to GitHub |
-| `POST` | `/api/github/fetch` | Pull from GitHub → merge locally |
+| `POST` | `/api/github/fetch` | Pull from GitHub and merge |
 
-**POST /api/github/config body:**
-```json
-{
-  "repoOwner": "your-username",
-  "repoName": "your-repo",
-  "branch": "main",
-  "filePath": "data/catalog.json"
-}
+### Stremio
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/manifest.json` | Add-on manifest (install this in Stremio) |
+| `GET` | `/subtitles/:type/:id.json` | Skip markers for playback |
+| `GET` | `/vtt/:videoId.vtt` | Raw WebVTT file served to player |
+
+---
+
+## 🛠️ Scripts
+
+```bash
+npm run seed                          # Load example data
+npm run validate                      # Check catalog.json for errors
+npm run export                        # Print catalog.json to stdout
+node scripts/export.js ./out.json     # Export to a file
+node scripts/sync-github.js           # Push to GitHub without starting server
 ```
 
 ---
 
-## Scripts
+## 🧪 Tests
 
 ```bash
-npm run seed          # Populate catalog.json with example data
-npm run validate      # Check catalog.json for errors
-npm run export        # Print catalog.json to stdout
-node scripts/export.js ./output.json    # Export to a file
-node scripts/sync-github.js             # Push to GitHub without starting server
-```
-
----
-
-## Testing
-
-```bash
-npm test              # Run all tests
+npm test              # Run all 16 tests
 npm test -- --watch   # Watch mode
 ```
 
 ---
 
-## Adding this to your Stremio add-on
+## 🔗 Using catalog.json in your own add-on
 
-Your add-on just needs to read `catalog.json`. Two options:
+Once you've pushed your data to GitHub, any add-on can consume it with a simple fetch:
 
-**Option A — direct file read (same server):**
 ```js
-const catalog = require('./data/catalog.json');
-
-function getSkipTimes(imdbId, season, episode) {
-  const show = catalog.media[imdbId];
-  if (!show) return [];
-  const videoId = `${imdbId}:${season}:${episode}`;
-  return (show.segments || []).filter(s => s.videoId === videoId || s.applyToSeries);
-}
-```
-
-**Option B — fetch from GitHub raw URL:**
-```js
-async function getSkipTimes(imdbId, season, episode) {
+async function getSkipSegments(imdbId, season, episode) {
   const res = await fetch(
     'https://raw.githubusercontent.com/your-username/your-repo/main/data/catalog.json'
   );
@@ -209,28 +227,29 @@ async function getSkipTimes(imdbId, season, episode) {
   const show = catalog.media[imdbId];
   if (!show) return [];
   const videoId = `${imdbId}:${season}:${episode}`;
-  return (show.segments || []).filter(s => s.videoId === videoId || s.applyToSeries);
+  return show.segments.filter(s => s.videoId === videoId || s.applyToSeries);
 }
 ```
 
-**Option C — fetch from this API server:**
+Or point directly at the live API:
+
 ```js
-const res = await fetch(`http://localhost:7000/api/segments?imdbId=${imdbId}`);
+const res = await fetch(`http://your-server/api/segments?imdbId=${imdbId}`);
 const segments = await res.json();
 ```
 
 ---
 
-## Contributing
+## 🤝 Contributing
 
 1. Fork this repo
-2. Clone and `npm install`
-3. Add your skip timestamps via the API or by editing `data/catalog.json`
-4. Run `npm run validate` to check your data
-5. Submit a pull request
+2. `npm install`
+3. Add timestamps via the API or by editing `data/catalog.json`
+4. Run `npm run validate` to verify your data
+5. Open a pull request
 
 ---
 
-## License
+## 📄 License
 
 MIT

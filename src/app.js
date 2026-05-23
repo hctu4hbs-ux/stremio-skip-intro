@@ -4,7 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const { builder } = require('./addon');
+const { builder, buildVtt } = require('./addon');
 
 const segmentsRouter = require('./routes/segments');
 const githubRouter = require('./routes/github');
@@ -53,6 +53,20 @@ app.get('/subtitles/:type/:id.json', async (req, res) => {
     } catch (err) {
         res.status(500).json({ subtitles: [] });
     }
+});
+
+// VTT endpoint — serves a real WebVTT file for each video ID
+// Stremio requires a proper HTTP URL (not a data URI) to load subtitle tracks
+app.get('/vtt/:videoId.vtt', (req, res) => {
+    const videoId = decodeURIComponent(req.params.videoId);
+    const vtt = buildVtt(videoId);
+    if (!vtt) {
+        res.status(404).send('WEBVTT\n\n# No skip segments found for: ' + videoId);
+        return;
+    }
+    res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=300');
+    res.send(vtt);
 });
 
 // Stremio also calls /:resource/:type/:id.json generically
