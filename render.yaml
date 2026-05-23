@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: stremio-skip-intro
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: false
+        value: 10000
+      - key: BASE_URL
+        sync: false
+      - key: ANISKIP_ENABLED
+        value: "true"
+      - key: DATA_DIR
+        value: /opt/render/project/src/data

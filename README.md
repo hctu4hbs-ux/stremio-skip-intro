@@ -1,85 +1,108 @@
 # ⏩ stremio-skip-intro
 
-> A self-hosted tool for building and publishing community skip-intro/outro timestamp databases — designed for Stremio add-on developers.
-
-Never sit through another intro again. This tool lets you manage a database of precise timestamps, then serve them directly to Stremio as a working add-on that shows a **Skip** button right when playback reaches the intro or outro.
+> A self-hosted server for managing and serving skip-intro/outro data to Stremio — with a real HLS proxy that physically removes intro segments before they reach the player.
 
 ---
 
-## ✨ What it does
+## ✨ Features
 
-| Feature | Description |
+| | |
 |---|---|
-| 🗂️ **Manage timestamps** | Add, edit, and delete intro/outro markers for any show or movie by IMDB ID |
-| ⏩ **Stremio add-on** | Installs directly into Stremio — shows a skip button at the exact moment |
-| 🔄 **GitHub sync** | Push your `catalog.json` to any GitHub repo with one command |
-| 📥 **Import / Export** | Import existing timestamp databases or export yours for sharing |
-| ✅ **Validation** | Catch bad timestamps, duplicates, and missing fields before publishing |
-| 🌐 **REST API** | Integrate into any automation pipeline or add-on project |
-| 🎌 **Anime support** | Optional lookup from community anime timestamp databases |
+| ⏩ **HLS stream proxy** | Rewrites any HLS manifest to physically cut intro and outro segments |
+| 🎯 **Stremio add-on** | Installs in one click — shows a Skip button using local + community data |
+| 🔀 **Multi-source aggregator** | Pulls from your local database, TheIntroDB, and AniSkip simultaneously |
+| 🗂️ **Segment management** | Full REST API to add, edit, and delete timestamps by IMDB ID |
+| ✅ **Validation** | Catch bad timestamps and duplicates before publishing |
+| 🌐 **Import / Export** | Standard catalog.json format compatible with other community tools |
 
 ---
 
-## 🚀 Quick start
+## 🚀 Deploy in one click
 
-Clone the repo, install dependencies, copy `.env.example` to `.env`, fill in your GitHub token and repo details, then run `npm run seed` to load example data and `npm start` to start the server on port `7000`.
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hctu4hbs-ux/stremio-skip-intro)
 
-Then open Stremio → **Add-ons** → paste the following into the search bar and click **Install**:
+Or self-host locally:
+
+```
+git clone https://github.com/hctu4hbs-ux/stremio-skip-intro
+npm install
+cp .env.example .env
+npm run seed
+npm start
+```
+
+Then install in Stremio by pasting into the Add-ons search bar:
 
 `http://localhost:7000/manifest.json`
 
-Done. 🎉 Stremio will now show a **Skip Intro / Skip Outro** button automatically during playback.
+---
 
-> 💡 For remote or public use, set `BASE_URL=https://your-server.com` in `.env` so the VTT URLs resolve correctly when Stremio is on a different machine.
+## ⚙️ How the HLS proxy works
+
+The proxy is the core feature. Instead of just showing a skip button, it surgically removes intro segments from the video stream before the player ever receives them.
+
+```
+Your stream source
+       │
+       └──► GET /proxy/hls?url=<stream>&videoId=tt...:1:1
+                   │
+                   ├─ Fetches original .m3u8 manifest
+                   ├─ Queries skip segments from all sources
+                   ├─ Drops segments inside intro/outro time ranges
+                   ├─ Inserts EXT-X-DISCONTINUITY markers
+                   └─ Rewrites all segment URLs through /proxy/segment
+                              │
+                              └──► Player receives clean stream, no intro
+```
+
+**To wrap any HLS stream:**
+
+Pass the original m3u8 URL (base64url encoded) and the video ID:
+
+`/proxy/hls?url=<base64url_of_m3u8>&videoId=tt0944947:1:1`
+
+Use `/proxy/lookup?videoId=tt0944947:1:1` to debug what segments will be skipped.
 
 ---
 
-## 📦 How Stremio integration works
+## 📡 Data sources
 
-When the add-on is installed, Stremio reads `/manifest.json` once. During every playback session it calls `/subtitles/:type/:id.json` with the video ID. The server responds with a URL pointing to a real WebVTT file at `/vtt/:videoId.vtt`. Stremio loads that file and the player shows a **Skip Intro** or **Skip Outro** button overlay at exactly the right timestamps.
+Skip segments are aggregated automatically from three sources, merged and deduplicated:
 
----
-
-## 🗂️ Data format
-
-The `data/catalog.json` file follows a standard schema that any Stremio add-on can read. Each show is keyed by its IMDB ID and contains a list of segments with a `videoId`, `start` and `end` time in seconds, and a `label` (`Intro`, `Outro`, `Recap`, or `Credits`).
-
-**Video ID format**
-
-| Content | Format | Example |
+| Source | Content | Auth |
 |---|---|---|
-| TV episode | `tt{id}:{season}:{episode}` | `tt0944947:1:3` |
-| Movie | `tt{id}` | `tt0111161` |
-| Anime (Kitsu) | `kitsu:{id}:{season}:{episode}` | `kitsu:12345:1:1` |
+| 🗂️ Local catalog | Your own managed timestamps | None |
+| 🌐 TheIntroDB | Community DB — movies + TV shows | None (public reads) |
+| 🎌 AniSkip | Anime openings/endings | None |
 
 ---
 
-## ⚙️ Environment variables
+## 🔌 API
 
-| Variable | Required | Description |
-|---|---|---|
-| `PORT` | No | Server port (default: `7000`) |
-| `BASE_URL` | No | Public URL for remote installs |
-| `GITHUB_TOKEN` | Yes (for sync) | GitHub PAT with `repo` scope |
-| `GITHUB_REPO_OWNER` | Yes (for sync) | GitHub username or org |
-| `GITHUB_REPO_NAME` | Yes (for sync) | Repository name |
-| `GITHUB_BRANCH` | No | Target branch (default: `main`) |
-| `GITHUB_FILE_PATH` | No | Path in repo (default: `data/catalog.json`) |
-| `ANISKIP_ENABLED` | No | Anime timestamp lookups (default: `true`) |
-| `DATA_DIR` | No | Local data directory (default: `./data`) |
+### Proxy
 
----
+| Endpoint | Description |
+|---|---|
+| `GET /proxy/hls?url=&videoId=` | Modified HLS manifest with intros removed |
+| `GET /proxy/segment?url=` | Transparent segment proxy (handles CORS) |
+| `GET /proxy/lookup?videoId=` | Debug: see all skip segments for a video |
 
-## 🔌 API reference
+### Stremio add-on
+
+| Endpoint | Description |
+|---|---|
+| `GET /manifest.json` | Paste this URL into Stremio to install |
+| `GET /subtitles/:type/:id.json` | Skip-button subtitle track |
+| `GET /vtt/:videoId.vtt` | WebVTT file with `{skip}` cues |
 
 ### Segments
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/segments` | List all — filter by `?imdbId=` or `?label=` |
-| `GET` | `/api/segments/stats` | Total shows, segment counts, label breakdown |
-| `POST` | `/api/segments` | Add a new segment |
-| `PATCH` | `/api/segments/:id` | Update start/end/label |
+| `GET` | `/api/segments` | List all segments (`?imdbId=` `?label=`) |
+| `GET` | `/api/segments/stats` | Counts by show and label |
+| `POST` | `/api/segments` | Add a segment |
+| `PATCH` | `/api/segments/:id` | Update a segment |
 | `PUT` | `/api/segments/:videoId` | Replace all segments for an episode |
 | `DELETE` | `/api/segments/:id` | Delete a segment |
 | `GET` | `/api/segments/aniskip/:malId/:episode` | Look up anime timestamps |
@@ -88,29 +111,22 @@ The `data/catalog.json` file follows a standard schema that any Stremio add-on c
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/catalog` | Full `catalog.json` |
-| `GET` | `/api/catalog/:imdbId` | One show with all its segments |
-| `POST` | `/api/catalog/shows` | Add a show entry |
-| `DELETE` | `/api/catalog/shows/:imdbId` | Delete show and all segments |
+| `GET` | `/api/catalog` | Full catalog.json |
+| `GET` | `/api/catalog/:imdbId` | One show with all segments |
+| `POST` | `/api/catalog/shows` | Add a show |
+| `DELETE` | `/api/catalog/shows/:imdbId` | Delete a show and its segments |
 | `POST` | `/api/catalog/import` | Import an existing catalog (`mode`: `merge` or `overwrite`) |
 
-### GitHub sync
+---
 
-| Method | Endpoint | Description |
+## ⚙️ Environment variables
+
+| Variable | Default | Description |
 |---|---|---|
-| `GET` | `/api/github/config` | Current config |
-| `POST` | `/api/github/config` | Save repo settings |
-| `GET` | `/api/github/preview` | Preview before pushing |
-| `POST` | `/api/github/sync` | Push `catalog.json` to GitHub |
-| `POST` | `/api/github/fetch` | Pull from GitHub and merge |
-
-### Stremio
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/manifest.json` | Add-on manifest — paste this URL into Stremio |
-| `GET` | `/subtitles/:type/:id.json` | Skip markers for playback |
-| `GET` | `/vtt/:videoId.vtt` | WebVTT file served to Stremio player |
+| `PORT` | `7000` | Server port |
+| `BASE_URL` | auto-detected | Public URL for Stremio VTT + proxy links |
+| `ANISKIP_ENABLED` | `true` | Enable anime timestamp lookups |
+| `DATA_DIR` | `./data` | Where catalog.json is stored |
 
 ---
 
@@ -118,22 +134,10 @@ The `data/catalog.json` file follows a standard schema that any Stremio add-on c
 
 | Command | Description |
 |---|---|
-| `npm run seed` | Load example data (Game of Thrones, Breaking Bad, Naruto) |
-| `npm run validate` | Check `catalog.json` for errors before publishing |
-| `npm run export` | Print `catalog.json` to stdout or a file |
-| `node scripts/sync-github.js` | Push to GitHub without starting the server |
-
----
-
-## 🧪 Tests
-
-Run `npm test` to execute all 16 unit and integration tests. Use `npm test -- --watch` for watch mode during development.
-
----
-
-## 🔗 Using catalog.json in your own add-on
-
-Once your data is pushed to GitHub, any add-on can fetch it from the raw GitHub URL and use the segments array directly — no dependency on this server required.
+| `npm run seed` | Load example data |
+| `npm run validate` | Check catalog.json for errors |
+| `npm run export` | Export catalog.json to stdout or a file |
+| `npm test` | Run all tests |
 
 ---
 
@@ -142,14 +146,14 @@ Once your data is pushed to GitHub, any add-on can fetch it from the raw GitHub 
 1. Fork this repo
 2. Run `npm install`
 3. Add timestamps via the API or by editing `data/catalog.json` directly
-4. Run `npm run validate` to verify your data is clean
+4. Run `npm run validate` to verify your data
 5. Open a pull request
 
 ---
 
 ## 📬 Contact
 
-Questions, suggestions, or contributions? Reach out at **hctu4hbs@gmail.com**
+Questions or contributions — **hctu4hbs@gmail.com**
 
 ---
 

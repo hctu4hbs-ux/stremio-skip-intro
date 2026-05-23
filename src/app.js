@@ -7,8 +7,8 @@ const rateLimit = require('express-rate-limit');
 const { builder, buildVtt } = require('./addon');
 
 const segmentsRouter = require('./routes/segments');
-const githubRouter = require('./routes/github');
 const catalogRouter = require('./routes/catalog');
+const proxyRouter = require('./routes/proxy');
 
 const app = express();
 
@@ -30,13 +30,9 @@ const limiter = rateLimit({
     message: { error: 'Too many requests, please slow down.' },
 });
 app.use('/api/', limiter);
+app.use('/proxy/', rateLimit({ windowMs: 60 * 1000, max: 500 }));
 
 // ─── Stremio Add-on routes ────────────────────────────────────────────────────
-// These are the endpoints Stremio calls to install and use the add-on.
-//
-//   GET /manifest.json          ← Stremio reads this to install the add-on
-//   GET /subtitles/:type/:id.json  ← Stremio calls this during playback
-//
 const addonInterface = builder.getInterface();
 
 app.get('/manifest.json', (_req, res) => {
@@ -46,17 +42,26 @@ app.get('/manifest.json', (_req, res) => {
 
 app.get('/subtitles/:type/:id.json', async (req, res) => {
     const { type, id } = req.params;
-    const extra = req.query;
     try {
-        const result = await addonInterface.get({ resource: 'subtitles', type, id: decodeURIComponent(id), extra });
+        const result = await addonInterface.get({ resource: 'subtitles', type, id: decodeURIComponent(id), extra: req.query });
         res.json(result);
-    } catch (err) {
+    } catch {
         res.status(500).json({ subtitles: [] });
     }
 });
 
-// VTT endpoint — serves a real WebVTT file for each video ID
-// Stremio requires a proper HTTP URL (not a data URI) to load subtitle tracks
+app.get('/:resource/:type/:id.json', async (req, res, next) => {
+    const { resource, type, id } = req.params;
+    if (!['subtitles', 'catalog', 'meta', 'stream'].includes(resource)) return next();
+    try {
+        const result = await addonInterface.get({ resource, type, id: decodeURIComponent(id), extra: req.query });
+        res.json(result);
+    } catch {
+        next();
+    }
+});
+
+// ─── VTT files — real hosted URLs that Stremio loads for skip button ─────────
 app.get('/vtt/:videoId.vtt', (req, res) => {
     const videoId = decodeURIComponent(req.params.videoId);
     const vtt = buildVtt(videoId);
@@ -66,25 +71,15 @@ app.get('/vtt/:videoId.vtt', (req, res) => {
     }
     res.setHeader('Content-Type', 'text/vtt; charset=utf-8');
     res.setHeader('Cache-Control', 'public, max-age=300');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(vtt);
 });
 
-// Stremio also calls /:resource/:type/:id.json generically
-app.get('/:resource/:type/:id.json', async (req, res, next) => {
-    const { resource, type, id } = req.params;
-    if (!['subtitles', 'catalog', 'meta', 'stream'].includes(resource)) return next();
-    const extra = req.query;
-    try {
-        const result = await addonInterface.get({ resource, type, id: decodeURIComponent(id), extra });
-        res.json(result);
-    } catch {
-        next();
-    }
-});
+// ─── HLS proxy — strips intro/outro segments from any stream ─────────────────
+app.use('/proxy', proxyRouter);
 
 // ─── Management API routes ────────────────────────────────────────────────────
 app.use('/api/segments', segmentsRouter);
-app.use('/api/github', githubRouter);
 app.use('/api/catalog', catalogRouter);
 
 // ─── Health ───────────────────────────────────────────────────────────────────
@@ -92,31 +87,20 @@ app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', version: require('../package.json').version });
 });
 
-// ─── API root index ──────────────────────────────────────────────────────────
-app.get('/api', (_req, res) => {
-    const host = req.headers.host || `localhost:${process.env.PORT || 7000}`;
+// ─── API index ────────────────────────────────────────────────────────────────
+app.get('/api', (req, res) => {
+    const host = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     res.json({
         name: 'stremio-skip-intro',
         version: require('../package.json').version,
         stremio: {
-            installUrl: `stremio://${host}/manifest.json`,
-            manifestUrl: `http://${host}/manifest.json`,
-            note: 'Open installUrl in Stremio or paste manifestUrl into the Add-ons search bar',
+            installUrl: `stremio://${host.replace(/^https?:\/\//, '')}/manifest.json`,
+            manifestUrl: `${host}/manifest.json`,
         },
-        endpoints: {
-            'GET  /manifest.json': 'Stremio add-on manifest (install this)',
-            'GET  /subtitles/:type/:id.json': 'Skip-intro subtitles (called by Stremio)',
-            'GET  /api/segments': 'List all segments',
-            'POST /api/segments': 'Add a segment',
-            'PATCH /api/segments/:id': 'Update a segment',
-            'DELETE /api/segments/:id': 'Delete a segment',
-            'GET  /api/catalog': 'Full catalog.json',
-            'GET  /api/catalog/:imdbId': 'One show with all segments',
-            'POST /api/catalog/import': 'Import existing catalog.json',
-            'GET  /api/github/config': 'GitHub sync config',
-            'POST /api/github/config': 'Save GitHub sync config',
-            'POST /api/github/sync': 'Push catalog.json to GitHub',
-            'GET  /api/github/preview': 'Preview before pushing',
+        proxy: {
+            hls: `${host}/proxy/hls?url=<base64url_m3u8>&videoId=<videoId>`,
+            segment: `${host}/proxy/segment?url=<base64url_segment>`,
+            lookup: `${host}/proxy/lookup?videoId=<videoId>`,
         },
     });
 });
