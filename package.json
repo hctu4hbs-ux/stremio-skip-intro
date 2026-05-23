@@ -1,0 +1,45 @@
+{
+  "name": "stremio-skip-intro",
+  "version": "1.0.0",
+  "description": "A community-powered skip-intro data management tool for Stremio add-on developers. Manage, validate, and publish intro/outro timestamps to GitHub.",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest --coverage",
+    "lint": "eslint src/",
+    "seed": "node scripts/seed.js",
+    "export": "node scripts/export.js",
+    "validate": "node scripts/validate.js"
+  },
+  "keywords": [
+    "stremio",
+    "addon",
+    "skip-intro",
+    "skip-outro",
+    "timestamps",
+    "community"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.7.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^7.3.1",
+    "helmet": "^7.1.0",
+    "morgan": "^1.10.0",
+    "stremio-addon-sdk": "^1.6.10",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "eslint": "^9.5.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.4",
+    "supertest": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
