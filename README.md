@@ -17,11 +17,21 @@
 
 ---
 
-## 🚀 Deploy in one click
+## ☁️ Hosting
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/hctu4hbs-ux/stremio-skip-intro)
+| Level | Platform | Why |
+|---|---|---|
+| 🟢 **Beginner** | [Render](https://render.com) | Free tier, zero config, deploys straight from GitHub in minutes |
+| 🔵 **Intermediate** | [Hugging Face Spaces](https://huggingface.co/spaces) | Free compute, great for community-shared tools, supports Node.js via Docker |
+| 🔴 **Professional** | [Oracle Cloud](https://www.oracle.com/cloud/free) | Always-free tier with real server resources — best performance and full control |
 
-Or self-host locally:
+Set `BASE_URL` in your environment to the public URL after deploying so Stremio can reach the VTT and proxy endpoints.
+
+---
+
+## 🚀 Quick start
+
+Self-host locally:
 
 ```
 git clone https://github.com/hctu4hbs-ux/stremio-skip-intro
