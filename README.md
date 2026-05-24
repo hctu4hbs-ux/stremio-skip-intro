@@ -1,6 +1,6 @@
 # ⏩ stremio-skip-intro
 
-> A self-hosted server for managing and serving skip-intro/outro data to Stremio — with a real HLS proxy that physically removes intro segments before they reach the player.
+> A self-hosted server that physically removes intro and outro segments from HLS streams before Stremio's player loads them. No button. No overlay. The intro simply does not exist in the stream.
 
 ---
 
@@ -8,9 +8,8 @@
 
 | | |
 |---|---|
-| ⏩ **HLS stream proxy** | Rewrites any HLS manifest to physically cut intro and outro segments |
-| 🎯 **Stremio add-on** | Installs in one click — shows a Skip button using local + community data |
-| 🔀 **Multi-source aggregator** | Pulls from your local database, TheIntroDB, and AniSkip simultaneously |
+| ⏩ **HLS stream proxy** | Rewrites any HLS manifest to cut intro/outro segments before the player loads them |
+| 🔀 **Multi-source aggregator** | Pulls timestamps from your local database, TheIntroDB, and AniSkip simultaneously |
 | 🗂️ **Segment management** | Full REST API to add, edit, and delete timestamps by IMDB ID |
 | ✅ **Validation** | Catch bad timestamps and duplicates before publishing |
 | 🌐 **Import / Export** | Standard catalog.json format compatible with other community tools |
@@ -25,13 +24,11 @@
 | 🔵 **Intermediate** | [Hugging Face Spaces](https://huggingface.co/spaces) | Free compute, great for community-shared tools, supports Node.js via Docker |
 | 🔴 **Professional** | [Oracle Cloud](https://www.oracle.com/cloud/free) | Always-free tier with real server resources — best performance and full control |
 
-Set `BASE_URL` in your environment to the public URL after deploying so Stremio can reach the VTT and proxy endpoints.
+Set `BASE_URL` in your environment to the public URL after deploying so stream proxy links resolve correctly from any device.
 
 ---
 
 ## 🚀 Quick start
-
-Self-host locally:
 
 ```
 git clone https://github.com/hctu4hbs-ux/stremio-skip-intro
@@ -41,6 +38,10 @@ npm run seed
 npm start
 ```
 
+Set `UPSTREAM_ADDON_URL` in `.env` to any Stremio add-on that provides HLS streams, for example:
+
+`UPSTREAM_ADDON_URL=https://torrentio.strem.fun/sort=qualitysize`
+
 Then install in Stremio by pasting into the Add-ons search bar:
 
 `http://localhost:7000/manifest.json`
@@ -49,7 +50,7 @@ Then install in Stremio by pasting into the Add-ons search bar:
 
 ## ⚙️ How the HLS proxy works
 
-The proxy is the core feature. Instead of just showing a skip button, it surgically removes intro segments from the video stream before the player ever receives them.
+The proxy fetches the original stream manifest, locates the segments that fall inside intro or outro time ranges, removes them, and returns a rewritten manifest to the player. The player receives a clean stream with no intro — it never knew one existed.
 
 ```
 Your stream source
@@ -65,13 +66,11 @@ Your stream source
                               └──► Player receives clean stream, no intro
 ```
 
-**To wrap any HLS stream:**
-
-Pass the original m3u8 URL (base64url encoded) and the video ID:
+To wrap any HLS stream manually:
 
 `/proxy/hls?url=<base64url_of_m3u8>&videoId=tt0944947:1:1`
 
-Use `/proxy/lookup?videoId=tt0944947:1:1` to debug what segments will be skipped.
+Use `/proxy/lookup?videoId=tt0944947:1:1` to check what segments will be removed before going live.
 
 ---
 
@@ -102,8 +101,7 @@ Skip segments are aggregated automatically from three sources, merged and dedupl
 | Endpoint | Description |
 |---|---|
 | `GET /manifest.json` | Paste this URL into Stremio to install |
-| `GET /subtitles/:type/:id.json` | Skip-button subtitle track |
-| `GET /vtt/:videoId.vtt` | WebVTT file with `{skip}` cues |
+| `GET /stream/:type/:id.json` | Proxied streams with intros removed |
 
 ### Segments
 
@@ -134,7 +132,8 @@ Skip segments are aggregated automatically from three sources, merged and dedupl
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `7000` | Server port |
-| `BASE_URL` | auto-detected | Public URL for Stremio VTT + proxy links |
+| `BASE_URL` | auto-detected | Public URL for proxy links |
+| `UPSTREAM_ADDON_URL` | — | Stremio add-on to pull streams from (e.g. Torrentio) |
 | `ANISKIP_ENABLED` | `true` | Enable anime timestamp lookups |
 | `DATA_DIR` | `./data` | Where catalog.json is stored |
 

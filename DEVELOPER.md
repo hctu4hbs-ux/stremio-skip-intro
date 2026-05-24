@@ -1,23 +1,17 @@
-# 👨‍💻 Developer Guide — stremio-skip-intro
+# Developer Guide — stremio-skip-intro
 
-Everything a Stremio add-on developer needs to integrate skip-intro functionality.
+Everything a Stremio add-on developer needs to integrate automatic intro removal.
 
 ---
 
-## How it fits into your add-on
+## How it works
 
-stremio-skip-intro runs as a separate server alongside your add-on.
-Your add-on asks it for skip data, and either:
-
-- **Serves a subtitle track** → Stremio shows a "Skip" button the user clicks
-- **Wraps the stream through the HLS proxy** → Stremio auto-skips, user does nothing
+stremio-skip-intro runs as a separate server alongside your add-on. Your add-on passes stream URLs through the proxy — the proxy rewrites the HLS manifest to remove intro and outro segments before the player loads them. The user never sees the intro. There is no button, no overlay, nothing.
 
 ```
 Your add-on
     │
-    ├── GET /proxy/lookup?videoId=tt...:1:1   ← check what will be skipped
-    │
-    ├── GET /vtt/tt...:1:1.vtt               ← subtitle track for skip button
+    ├── GET /proxy/lookup?videoId=tt...:1:1   ← check what will be removed
     │
     └── GET /proxy/hls?url=<m3u8>&videoId=   ← modified stream, intros removed
 ```
@@ -31,13 +25,11 @@ Add this to any existing stream handler to wrap HLS streams:
 ```js
 const SKIP = 'http://localhost:7000'; // your stremio-skip-intro URL
 
-// Wrap any HLS stream — intros are cut before the player loads the file
 function skipProxy(m3u8Url, videoId) {
   const enc = Buffer.from(m3u8Url).toString('base64url');
   return `${SKIP}/proxy/hls?url=${enc}&videoId=${encodeURIComponent(videoId)}`;
 }
 
-// In your stream handler:
 builder.defineStreamHandler(async ({ type, id }) => {
   const originalUrl = await getStreamUrlFromYourSource(id);
   return {
@@ -49,34 +41,24 @@ builder.defineStreamHandler(async ({ type, id }) => {
 });
 ```
 
+That is the entire integration. The player loads the proxied URL and the intro is gone.
+
 ---
 
-## Add a skip button to existing streams
+## What actually happens inside the proxy
 
-If you don't control the stream URL, add a subtitle track instead.
-Stremio shows a "Skip Intro" button overlay at the right timestamps:
+1. The proxy fetches the original `.m3u8` manifest from your stream source
+2. It queries all skip data sources (local catalog, TheIntroDB, AniSkip) for that video ID
+3. It calculates which HLS segments fall inside intro/outro time ranges
+4. It drops those segments from the manifest
+5. It rewrites all remaining segment URLs through `/proxy/segment` (handles CORS)
+6. It returns the rewritten manifest to the player
 
-```js
-builder.defineSubtitlesHandler(async ({ type, id }) => {
-  const res = await fetch(`http://localhost:7000/proxy/lookup?videoId=${id}`);
-  const { segments } = await res.json();
-  if (!segments.length) return { subtitles: [] };
-
-  return {
-    subtitles: [{
-      id: `skip-${id}`,
-      url: `http://localhost:7000/vtt/${encodeURIComponent(id)}.vtt`,
-      lang: 'skip',
-    }]
-  };
-});
-```
+The player has no idea any of this happened. It loads a normal HLS stream that happens to start after the intro.
 
 ---
 
 ## Add timestamps for your content
-
-Use the REST API to add skip timestamps before serving them:
 
 ```js
 await fetch('http://localhost:7000/api/segments', {
@@ -90,16 +72,16 @@ await fetch('http://localhost:7000/api/segments', {
     start: 0,
     end: 97,
     label: 'Intro',        // Intro | Outro | Recap | Credits
-    applyToSeries: false,  // true = apply to all episodes
+    applyToSeries: false,  // true = apply same timestamps to all episodes
   })
 });
 ```
 
 ---
 
-## Check what will be skipped (debug)
+## Verify what will be removed (debug)
 
-Before going live, verify what segments exist for any video:
+Before going live, check what segments exist for any video:
 
 ```
 GET /proxy/lookup?videoId=tt0944947:1:1
@@ -131,32 +113,13 @@ Sources: `local` = your catalog, `tidb` = TheIntroDB, `aniskip` = AniSkip
 
 ---
 
-## Manifest requirements
-
-Your add-on manifest must include `subtitles` in resources if you want skip buttons:
-
-```js
-const manifest = {
-  id: 'com.example.myaddon',
-  version: '1.0.0',
-  name: 'My Add-on',
-  resources: ['stream', 'subtitles'],   // ← subtitles required for skip button
-  types: ['series', 'movie'],
-  idPrefixes: ['tt'],
-  catalogs: [],
-};
-```
-
----
-
 ## API reference
 
 | Method | Endpoint | Use case |
 |---|---|---|
 | `GET` | `/proxy/lookup?videoId=` | Debug: see all segments for a video |
 | `GET` | `/proxy/hls?url=&videoId=` | Wrap an HLS stream — intros removed |
-| `GET` | `/proxy/segment?url=` | Proxied segment (auto-called by player) |
-| `GET` | `/vtt/:videoId.vtt` | Skip subtitle track for Stremio player |
+| `GET` | `/proxy/segment?url=` | Proxied segment (called automatically by player) |
 | `GET` | `/api/segments?imdbId=` | List your local segments |
 | `POST` | `/api/segments` | Add a timestamp |
 | `PATCH` | `/api/segments/:id` | Update a timestamp |
@@ -169,19 +132,19 @@ const manifest = {
 
 ## Data sources
 
-Segments are aggregated automatically — you don't need to configure anything:
+Segments are aggregated automatically — no configuration needed:
 
 | Source | Data | Notes |
 |---|---|---|
-| Local catalog | Your own timestamps | Fastest, always wins on conflict |
-| TheIntroDB | Community DB — movies + TV | No auth required for reads |
+| Local catalog | Your own timestamps | Always highest priority |
+| TheIntroDB | Community DB — movies + TV | No auth required |
 | AniSkip | Anime openings/endings | Pass `malId` param for best results |
 
 ---
 
 ## Full example add-on
 
-See [`examples/my-stremio-addon/`](examples/my-stremio-addon/) for a complete working add-on you can clone and run immediately.
+See [`examples/my-stremio-addon/`](examples/my-stremio-addon/) for a complete working add-on you can clone and run.
 
 ```
 cd examples/my-stremio-addon
@@ -190,16 +153,14 @@ cp .env.example .env
 node addon.js
 ```
 
-Then paste `http://localhost:7001/manifest.json` into Stremio.
-
 ---
 
 ## Tips
 
-- **Hosting**: deploy stremio-skip-intro to a public URL (see README hosting section), then set `BASE_URL` so the VTT and proxy links work from any device.
-- **CORS**: all endpoints return `Access-Control-Allow-Origin: *` — no configuration needed.
-- **Rate limiting**: 300 req/15min on `/api/`, 500 req/min on `/proxy/`. For high traffic, self-host on Oracle Cloud (see README).
-- **applyToSeries**: set to `true` for segments that repeat every episode (most intros). The proxy will apply them to all episodes of that show automatically.
+- Set `BASE_URL` to the public URL of your server so proxy links work from any device.
+- CORS is open on all endpoints — no configuration needed.
+- Set `applyToSeries: true` for timestamps that repeat every episode (most intros). The proxy applies them to all episodes of that show automatically.
+- Rate limits: 300 req/15min on `/api/`, 500 req/min on `/proxy/`. For high traffic, deploy to Oracle Cloud (always-free, see README).
 
 ---
 
