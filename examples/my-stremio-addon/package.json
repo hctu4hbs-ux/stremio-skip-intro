@@ -1,0 +1,14 @@
+{
+  "name": "my-stremio-addon",
+  "version": "1.0.0",
+  "description": "Example Stremio add-on using stremio-skip-intro for automatic skip markers",
+  "main": "addon.js",
+  "scripts": {
+    "start": "node addon.js",
+    "dev": "nodemon addon.js"
+  },
+  "dependencies": {
+    "stremio-addon-sdk": "^1.6.10",
+    "dotenv": "^16.4.5"
+  }
+}
