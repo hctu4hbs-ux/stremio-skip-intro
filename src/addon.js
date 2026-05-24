@@ -124,16 +124,8 @@ builder.defineStreamHandler(async ({ type, id }) => {
     const streams = upstreamStreams.map(stream => {
         if (!hasSkipData) return stream;
 
-        if (isHls(stream.url)) {
-            return {
-                ...stream,
-                name: `${stream.name || ''}⏩`.trim(),
-                description: (stream.description ? stream.description + ' · ' : '') + 'Intro removed automatically',
-                url: wrapThroughProxy(stream.url, id),
-            };
-        }
 
-        // Non-HLS stream (torrent, etc.) — can't proxy, attach skip subtitle instead
+
         return {
             ...stream,
             subtitles: [

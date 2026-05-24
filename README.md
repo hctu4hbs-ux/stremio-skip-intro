@@ -1,6 +1,6 @@
 # ⏩ stremio-skip-intro
 
-> A self-hosted server that physically removes intro and outro segments from HLS streams before Stremio's player loads them. No button. No overlay. The intro simply does not exist in the stream.
+> A self-hosted server that provides skip intro/outro functionality for Stremio streams via VTT subtitle tracks. This enables the "Skip Intro" button or automatic skipping based on Stremio's player settings.
 
 ---
 
@@ -8,7 +8,7 @@
 
 | | |
 |---|---|
-| ⏩ **HLS stream proxy** | Rewrites any HLS manifest to cut intro/outro segments before the player loads them |
+| ⏩ **Skip Intro/Outro via VTT** | Adds a subtitle track with `{skip}` cues, enabling Stremio's native skip functionality. |
 | 🔀 **Multi-source aggregator** | Pulls timestamps from your local database, TheIntroDB, and AniSkip simultaneously |
 | 🗂️ **Segment management** | Full REST API to add, edit, and delete timestamps by IMDB ID |
 | ✅ **Validation** | Catch bad timestamps and duplicates before publishing |
@@ -48,29 +48,14 @@ Then install in Stremio by pasting into the Add-ons search bar:
 
 ---
 
-## ⚙️ How the HLS proxy works
+## ⚠️ Important Stremio Settings
 
-The proxy fetches the original stream manifest, locates the segments that fall inside intro or outro time ranges, removes them, and returns a rewritten manifest to the player. The player receives a clean stream with no intro — it never knew one existed.
+For the best experience with automatic skipping and seamless playback to the next episode, ensure the following settings are enabled in your Stremio application:
 
-```
-Your stream source
-       │
-       └──► GET /proxy/hls?url=<stream>&videoId=tt...:1:1
-                   │
-                   ├─ Fetches original .m3u8 manifest
-                   ├─ Queries skip segments from all sources
-                   ├─ Drops segments inside intro/outro time ranges
-                   ├─ Inserts EXT-X-DISCONTINUITY markers
-                   └─ Rewrites all segment URLs through /proxy/segment
-                              │
-                              └──► Player receives clean stream, no intro
-```
-
-To wrap any HLS stream manually:
-
-`/proxy/hls?url=<base64url_of_m3u8>&videoId=tt0944947:1:1`
-
-Use `/proxy/lookup?videoId=tt0944947:1:1` to check what segments will be removed before going live.
+*   **Player Settings:**
+    *   `Skip intro automatically`
+*   **General Settings:**
+    *   `Auto-play next episode`
 
 ---
 
@@ -88,25 +73,17 @@ Skip segments are aggregated automatically from three sources, merged and dedupl
 
 ## 🔌 API
 
-### Proxy
-
-| Endpoint | Description |
-|---|---|
-| `GET /proxy/hls?url=&videoId=` | Modified HLS manifest with intros removed |
-| `GET /proxy/segment?url=` | Transparent segment proxy (handles CORS) |
-| `GET /proxy/lookup?videoId=` | Debug: see all skip segments for a video |
-
 ### Stremio add-on
 
 | Endpoint | Description |
 |---|---|
 | `GET /manifest.json` | Paste this URL into Stremio to install |
-| `GET /stream/:type/:id.json` | Proxied streams with intros removed |
+| `GET /stream/:type/:id.json` | Streams with skip subtitle tracks |
 
 ### Segments
 
 | Method | Endpoint | Description |
-|---|---|---|
+|---|---|
 | `GET` | `/api/segments` | List all segments (`?imdbId=` `?label=`) |
 | `GET` | `/api/segments/stats` | Counts by show and label |
 | `POST` | `/api/segments` | Add a segment |
@@ -118,7 +95,7 @@ Skip segments are aggregated automatically from three sources, merged and dedupl
 ### Catalog
 
 | Method | Endpoint | Description |
-|---|---|---|
+|---|---|
 | `GET` | `/api/catalog` | Full catalog.json |
 | `GET` | `/api/catalog/:imdbId` | One show with all segments |
 | `POST` | `/api/catalog/shows` | Add a show |
