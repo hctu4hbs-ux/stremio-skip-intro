@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- Primary SEO -->
+  <title>Stremio Skip Intro — Auto-Skip Intros, Outros & Recaps in Stremio</title>
+  <meta name="description" content="Open-source tool for Stremio add-on developers. Automatically skip intros, outros, recaps and credits using an HLS stream proxy and community timestamp database. Powered by TheIntroDB and AniSkip." />
+  <meta name="keywords" content="stremio skip intro, stremio addon, skip intro stremio, stremio skip outro, stremio developer tool, hls proxy stremio, stremio intro skipper, stremio addon sdk, skip intro addon, stremio open source" />
+  <meta name="author" content="hctu4hbs@gmail.com" />
+  <link rel="canonical" href="https://hctu4hbs-ux.github.io/stremio-skip-intro/" />
+
+  <!-- Open Graph (Facebook, LinkedIn, Discord) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://hctu4hbs-ux.github.io/stremio-skip-intro/" />
+  <meta property="og:title" content="Stremio Skip Intro — Auto-Skip Intros & Outros" />
+  <meta property="og:description" content="HLS proxy + community timestamp database for Stremio add-on developers. Skip intros, outros, recaps and credits automatically." />
+  <meta property="og:image" content="https://i.imgur.com/MZnGMzp.png" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Stremio Skip Intro — Auto-Skip Intros & Outros" />
+  <meta name="twitter:description" content="HLS proxy + community timestamp database for Stremio add-on developers." />
+  <meta name="twitter:image" content="https://i.imgur.com/MZnGMzp.png" />
+
+  <!-- JSON-LD Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "stremio-skip-intro",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Windows, macOS, Linux",
+    "description": "Open-source Stremio add-on developer tool. HLS stream proxy that physically removes intro and outro segments. Multi-source timestamp aggregator using TheIntroDB and AniSkip.",
+    "url": "https://github.com/hctu4hbs-ux/stremio-skip-intro",
+    "downloadUrl": "https://github.com/hctu4hbs-ux/stremio-skip-intro",
+    "softwareVersion": "1.0.0",
+    "license": "https://opensource.org/licenses/MIT",
+    "author": {
+      "@type": "Person",
+      "email": "hctu4hbs@gmail.com"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "keywords": "stremio, skip intro, stremio addon, hls proxy, skip outro, intro skipper"
+  }
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f13;
+      color: #e2e2e8;
+      line-height: 1.6;
+    }
+
+    a { color: #7c6af7; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      padding: 80px 24px 64px;
+      text-align: center;
+      border-bottom: 1px solid #2a2a3e;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(124,106,247,0.15);
+      border: 1px solid rgba(124,106,247,0.4);
+      color: #a89cf7;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 4px 14px;
+      border-radius: 20px;
+      margin-bottom: 24px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 20px;
+      background: linear-gradient(90deg, #fff 0%, #a89cf7 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .hero p {
+      font-size: 1.15rem;
+      color: #9a9ab0;
+      max-width: 580px;
+      margin: 0 auto 36px;
+    }
+    .hero-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; text-decoration: none; }
+    .btn-primary { background: #7c6af7; color: #fff; }
+    .btn-secondary { background: rgba(255,255,255,0.07); color: #e2e2e8; border: 1px solid rgba(255,255,255,0.12); }
+
+    /* Main */
+    .container { max-width: 900px; margin: 0 auto; padding: 0 24px; }
+
+    /* How it works */
+    .section { padding: 64px 0; border-bottom: 1px solid #1e1e2e; }
+    .section h2 { font-size: 1.7rem; font-weight: 700; margin-bottom: 12px; color: #fff; }
+    .section .sub { color: #7a7a90; margin-bottom: 36px; }
+
+    /* Feature grid */
+    .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; margin-top: 36px; }
+    .feature {
+      background: #16161e;
+      border: 1px solid #2a2a3e;
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .feature-icon { font-size: 1.8rem; margin-bottom: 12px; }
+    .feature h3 { font-size: 1rem; font-weight: 700; color: #fff; margin-bottom: 6px; }
+    .feature p { font-size: 0.9rem; color: #7a7a90; }
+
+    /* Flow */
+    .flow {
+      background: #12121a;
+      border: 1px solid #2a2a3e;
+      border-radius: 12px;
+      padding: 28px 32px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 14px;
+      color: #a0a0b8;
+      line-height: 2;
+      margin-top: 28px;
+      overflow-x: auto;
+    }
+    .flow .comment { color: #5a5a70; }
+    .flow .highlight { color: #7c6af7; font-weight: 600; }
+    .flow .green { color: #50fa7b; }
+    .flow .yellow { color: #f1fa8c; }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 16px; margin-top: 28px; }
+    .step {
+      display: flex;
+      gap: 16px;
+      align-items: flex-start;
+      background: #16161e;
+      border: 1px solid #2a2a3e;
+      border-radius: 10px;
+      padding: 20px 24px;
+    }
+    .step-num {
+      background: #7c6af7;
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-body h4 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .step-body p { font-size: 0.88rem; color: #7a7a90; }
+    .step-body code {
+      background: #0f0f18;
+      border: 1px solid #2a2a3e;
+      border-radius: 4px;
+      padding: 2px 7px;
+      font-family: monospace;
+      font-size: 12px;
+      color: #a89cf7;
+    }
+
+    /* Sources */
+    .sources { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 24px; }
+    .source-tag {
+      background: #1a1a2e;
+      border: 1px solid #2a2a3e;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 0.88rem;
+      color: #b0b0c8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .source-tag span { font-weight: 600; color: #e2e2e8; }
+
+    /* Footer */
+    footer {
+      text-align: center;
+      padding: 48px 24px;
+      color: #4a4a60;
+      font-size: 0.88rem;
+    }
+    footer a { color: #6a6a80; }
+  </style>
+</head>
+<body>
+
+  <!-- Hero -->
+  <header class="hero">
+    <div class="hero-badge">Open Source · Free · MIT License</div>
+    <h1>⏩ Stremio Skip Intro</h1>
+    <p>
+      The developer tool for building skip-intro functionality into any Stremio add-on.
+      HLS proxy that physically removes intros — no button clicks required.
+    </p>
+    <div class="hero-buttons">
+      <a class="btn btn-primary" href="https://github.com/hctu4hbs-ux/stremio-skip-intro">
+        ★ View on GitHub
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/hctu4hbs-ux/stremio-skip-intro/blob/main/DEVELOPER.md">
+        Developer Guide
+      </a>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Features -->
+    <section class="section">
+      <div class="container">
+        <h2>Everything you need to skip intros in Stremio</h2>
+        <p class="sub">A complete server-side toolkit — install it once, use it from any add-on.</p>
+        <div class="features">
+          <div class="feature">
+            <div class="feature-icon">⏩</div>
+            <h3>HLS Stream Proxy</h3>
+            <p>Rewrites any HLS manifest to physically cut intro and outro segments before the player loads them.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🔀</div>
+            <h3>Multi-Source Data</h3>
+            <p>Aggregates timestamps from your local database, TheIntroDB, and AniSkip simultaneously.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🎯</div>
+            <h3>Stremio Add-on</h3>
+            <p>Ships as a ready-to-install Stremio add-on. Paste the manifest URL into Stremio and it works instantly.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">🗂️</div>
+            <h3>REST API</h3>
+            <p>Full API to add, edit, and delete timestamps by IMDB ID. Import existing databases in one call.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">✅</div>
+            <h3>Validator</h3>
+            <p>Built-in script catches bad timestamps, duplicate segments, and missing fields before you publish.</p>
+          </div>
+          <div class="feature">
+            <div class="feature-icon">☁️</div>
+            <h3>Free Hosting</h3>
+            <p>Deploy to Render (beginner), Hugging Face (intermediate), or Oracle Cloud (professional) — all free.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How it works -->
+    <section class="section">
+      <div class="container">
+        <h2>How the proxy works</h2>
+        <p class="sub">The player never receives the intro — it is removed at the network level.</p>
+        <div class="flow">
+          <span class="comment">// Your Stremio add-on returns this stream URL:</span><br>
+          <span class="highlight">/proxy/hls</span>?url=<span class="yellow">&lt;base64url_m3u8&gt;</span>&amp;videoId=<span class="yellow">tt0944947:1:1</span><br><br>
+          <span class="comment">// stremio-skip-intro fetches the original manifest</span><br>
+          <span class="comment">// queries all sources for skip segments</span><br>
+          <span class="comment">// drops segments inside intro/outro ranges</span><br>
+          <span class="comment">// returns a clean manifest to Stremio's player</span><br><br>
+          <span class="green">✓ Player loads.  Intro never plays.  No button needed.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick start -->
+    <section class="section">
+      <div class="container">
+        <h2>Get started in 4 steps</h2>
+        <p class="sub">From clone to working Stremio add-on in under 5 minutes.</p>
+        <div class="steps">
+          <div class="step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <h4>Clone and install</h4>
+              <p><code>git clone https://github.com/hctu4hbs-ux/stremio-skip-intro &amp;&amp; npm install</code></p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <h4>Add your first timestamp</h4>
+              <p>POST to <code>/api/segments</code> with the IMDB ID, episode, start and end time in seconds.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <h4>Wrap your stream through the proxy</h4>
+              <p>Pass the original .m3u8 URL (base64url encoded) and videoId to <code>/proxy/hls</code>. Return the proxy URL from your stream handler.</p>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <h4>Install in Stremio</h4>
+              <p>Paste <code>http://your-server/manifest.json</code> into the Stremio Add-ons search bar and click Install.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Data sources -->
+    <section class="section">
+      <div class="container">
+        <h2>Automatic data from community sources</h2>
+        <p class="sub">No manual setup — segments are fetched and merged automatically on every request.</p>
+        <div class="sources">
+          <div class="source-tag">🗂️ <span>Local catalog</span> — your own timestamps, always fastest</div>
+          <div class="source-tag">🌐 <span>TheIntroDB</span> — community database for movies &amp; TV</div>
+          <div class="source-tag">🎌 <span>AniSkip</span> — anime openings and endings</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="section" style="border-bottom:none; text-align:center;">
+      <div class="container">
+        <h2>Ready to build?</h2>
+        <p class="sub" style="margin-bottom:32px;">Read the full developer guide or clone the example add-on and start in minutes.</p>
+        <div class="hero-buttons">
+          <a class="btn btn-primary" href="https://github.com/hctu4hbs-ux/stremio-skip-intro">
+            View on GitHub
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/hctu4hbs-ux/stremio-skip-intro/blob/main/DEVELOPER.md">
+            Developer Guide
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/hctu4hbs-ux/stremio-skip-intro/tree/main/examples/my-stremio-addon">
+            Example Add-on
+          </a>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>
+      <strong style="color:#e2e2e8;">stremio-skip-intro</strong> — open source, MIT license<br>
+      <a href="mailto:hctu4hbs@gmail.com">hctu4hbs@gmail.com</a> ·
+      <a href="https://github.com/hctu4hbs-ux/stremio-skip-intro">GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>
